@@ -384,26 +384,11 @@ library(stringr)
 
 snp_data <- fread('2023_Missouri_Valley_Medium_cleaned_hundredKernelMass.y_mlm.csv')
 
-colnames(snp_data)
-
-snp_data[SNP == "chr8_169059592"]
-
-snp_data[SNP == "chr3_112611134"]
-
-head(snp_data)
-
 # Load full effect summary
 effect_data <- fread("Final_Effect_Summary_SpecificSNPs.csv")
 
 #Set the environment you want to process
 env <- "Missouri Valley 2023"
-
-# Check if the SNP exists in the effect summary
-effect_data[SNP == "chr3_112611134"]
-
-"chr3_112611134" %in% effect_data$SNP
-
-head(effect_data$SNP)
 
 #  Clean SNP format once
 effect_data$SNP <- paste0("chr", str_replace(effect_data$SNP, "^chr", ""))
@@ -430,7 +415,7 @@ for (trait in traits) {
   
   # Skip if file missing
   if (!file.exists(file)) {
-    message("⛔ File not found: ", file)
+    message("File not found: ", file)
     next
   }
   
@@ -457,7 +442,7 @@ for (trait in traits) {
   # Save per-trait result
   out_name <- paste0("Effect_Summary_", str_replace_all(env, " ", "_"), "_", trait, ".csv")
   fwrite(df, out_name)
-  message("✅ Done: ", out_name, "\n")
+  message("Done: ", out_name, "\n")
 }
 
 
@@ -469,8 +454,6 @@ all_data_unique <- all_data[!duplicated(all_data[, .(SNP, Trait, Env)]), ]
 
 # Save cleaned version
 fwrite(all_data_unique, "Effect_Summary_ALL_Envs_Traits.csv")
-
-message("✅ Combined and deduplicated: Effect_Summary_ALL_Envs_Traits.csv")
 
 
 
@@ -598,6 +581,9 @@ library(stringr)
 library(ggplot2)
 
 # ---- Load data ----
+
+getwd()
+setwd('~/Documents/PhD work/Yield_project/SNP effect/SNP_effect_v2/cleaned_data/')
 data <- fread("Effect_Summary_ALL_Envs_Traits.csv")
 
 # ---- Prepare data ----
@@ -873,3 +859,45 @@ genotype_counts <- df %>%
 
 # View results
 print(genotype_counts)
+
+
+
+
+library(dplyr)
+
+# Assume your data is in long format with columns: SNP, Environment, effect_size
+# Example: effect_data <- read.csv("snp_effects_long.csv")
+
+# Step 1: Compute mean, SD, CV
+stability_metrics <- effect_data %>%
+  group_by(SNP) %>%
+  summarise(
+    mean_effect = mean(effect_size, na.rm = TRUE),
+    sd_effect = sd(effect_size, na.rm = TRUE),
+    cv_effect = sd_effect / abs(mean_effect + 1e-6),  # small offset to avoid division by 0
+    .groups = "drop"
+  )
+
+# Step 2: Compute sign consistency (directional stability)
+sign_consistency <- effect_data %>%
+  group_by(SNP) %>%
+  summarise(
+    median_sign = sign(median(effect_size, na.rm = TRUE)),
+    sign_agree = mean(sign(effect_size) == median_sign, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Step 3: Merge and compute stability score
+snp_stability <- stability_metrics %>%
+  left_join(sign_consistency, by = "SNP") %>%
+  mutate(stability_score = sign_agree / (cv_effect + 1))
+
+# Step 4: Optional: Rank SNPs by stability
+snp_stability <- snp_stability %>%
+  arrange(desc(stability_score))
+
+# View top stable SNPs
+head(snp_stability)
+
+# Save output if needed
+# write.csv(snp_stability, "snp_stability_metrics.csv", row.names = FALSE)
